@@ -1,5 +1,11 @@
 # Non-Local Pooling
 
+To use NonLocalPooling for your PyTorch project:
+
+```
+pip install nonlocalpooling
+```
+
 ```
 from nonlocalpooling.pool import NonLocalPool2d, NonLocalPool3d
 ```
