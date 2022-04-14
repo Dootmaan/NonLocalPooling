@@ -1,8 +1,7 @@
-# NonLocal Pooling
+# Non-Local Pooling
 
-To use NonLocal Pooling with PyTorch, simply copy the file to your existing projects and
 ```
-import NonLocalPooling from nonlocalpooling
+from nonlocalpooling.pool import NonLocalPool2d, NonLocalPool3d
 ```
 
-NonLocal Pooling can be used to substitue your original pooling methods.
+Non-Local Pooling can be used to substitue your original PyTorch pooling methods.
