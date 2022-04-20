@@ -40,7 +40,7 @@ class MixerBlock3d(torch.nn.Module):
             in_size=[isize,isize]
         # self.out_size=[in_size[0]//scale, in_size[1]//scale, in_size[2]//scale]
         self.num_token=in_size[0]//patch_size[0]*in_size[1]//patch_size[1]*in_size[2]//patch_size[2]
-        self.token_dim=in_channel//2 if in_channel>1 else in_channel
+        self.token_dim=in_channel//2 if in_channel>16 else 8
         
         self.embedding = torch.nn.Conv3d(in_channel, self.token_dim, patch_size, patch_size)
         self.token_mix = torch.nn.Sequential(
@@ -54,8 +54,8 @@ class MixerBlock3d(torch.nn.Module):
         self.pixelshuffle=PixelShuffle3d(patch_size[0]//scale,patch_size[1]//scale,patch_size[2]//scale)
         self.channel_mix = torch.nn.Sequential(
             Rearrange('b c d h w -> b (d h w) c'),
-            torch.nn.LayerNorm(self.token_dim//(patch_size[0]//scale*patch_size[1]//scale*patch_size[2]//scale)),
-            torch.nn.Linear(self.token_dim//(patch_size[0]//scale*patch_size[1]//scale*patch_size[2]//scale), in_channel),
+            torch.nn.LayerNorm(self.token_dim//8),
+            torch.nn.Linear(self.token_dim//8, in_channel),
             Rearrange('b (d h w) c -> b c d h w',d=in_size[0]//scale, h=in_size[1]//scale, w=in_size[2]//scale)
         )
         
@@ -80,7 +80,7 @@ class MixerBlock2d(torch.nn.Module):
             in_size=[isize,isize]
         # self.out_size=[in_size[0]//scale, in_size[1]//scale, in_size[2]//scale]
         self.num_token=in_size[0]//patch_size[0]*in_size[1]//patch_size[1]
-        self.token_dim=in_channel//2 if in_channel>1 else in_channel
+        self.token_dim=in_channel//2 if in_channel>8 else 4
         
         self.embedding = torch.nn.Conv2d(in_channel, self.token_dim, patch_size, patch_size)
         self.token_mix = torch.nn.Sequential(
@@ -94,8 +94,8 @@ class MixerBlock2d(torch.nn.Module):
         self.pixelshuffle=torch.nn.PixelShuffle(patch_size[0]//scale)
         self.channel_mix = torch.nn.Sequential(
             Rearrange('b c h w -> b (h w) c'),
-            torch.nn.LayerNorm(self.token_dim//(patch_size[0]//scale*patch_size[1]//scale)),
-            torch.nn.Linear(self.token_dim//(patch_size[0]//scale*patch_size[1]//scale), in_channel),
+            torch.nn.LayerNorm(self.token_dim//4),
+            torch.nn.Linear(self.token_dim//4, in_channel),
             Rearrange('b (h w) c -> b c h w',h=in_size[0]//scale, w=in_size[1]//scale)
         )
         
