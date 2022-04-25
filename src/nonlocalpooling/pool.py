@@ -5,7 +5,7 @@ class PixelShuffle3d(torch.nn.Module):
     '''
     This class is a 3d version of pixelshuffle.
     '''
-    def __init__(self, scale_d=8, scale_h=8, scale_w=8):
+    def __init__(self, scale_d=2, scale_h=2, scale_w=2):
         '''
         :param scale: upsample scale
         '''
@@ -31,16 +31,18 @@ class PixelShuffle3d(torch.nn.Module):
 
 class MixerBlock3d(torch.nn.Module):
 
-    def __init__(self, in_channel, in_size, scale=2):
+    def __init__(self, in_size, in_channel, out_channel=None, scale=2):
         super(MixerBlock3d,self).__init__()
         patch_size=[2*scale,2*scale,2*scale]
         
         if not isinstance(in_size,list):
             isize=in_size
             in_size=[isize,isize]
+        if out_channel is None:
+            out_channel=in_channel
         # self.out_size=[in_size[0]//scale, in_size[1]//scale, in_size[2]//scale]
         self.num_token=in_size[0]//patch_size[0]*in_size[1]//patch_size[1]*in_size[2]//patch_size[2]
-        self.token_dim=in_channel//2 if in_channel>16 else 8
+        self.token_dim=out_channel//2
         
         self.embedding = torch.nn.Conv3d(in_channel, self.token_dim, patch_size, patch_size)
         self.token_mix = torch.nn.Sequential(
@@ -51,12 +53,18 @@ class MixerBlock3d(torch.nn.Module):
             torch.nn.Linear(self.num_token//2, self.num_token),
             Rearrange('b c (d h w) -> b c d h w', d=in_size[0]//patch_size[0],h=in_size[1]//patch_size[1],w=in_size[2]//patch_size[2])
         )
-        self.pixelshuffle=PixelShuffle3d(patch_size[0]//scale,patch_size[1]//scale,patch_size[2]//scale)
-        self.channel_mix = torch.nn.Sequential(
+        self.pixelshuffle=PixelShuffle3d(2,2,2)
+        self.channel_mix1 = torch.nn.Sequential(
             Rearrange('b c d h w -> b (d h w) c'),
-            torch.nn.LayerNorm(self.token_dim//8),
-            torch.nn.Linear(self.token_dim//8, in_channel),
-            Rearrange('b (d h w) c -> b c d h w',d=in_size[0]//scale, h=in_size[1]//scale, w=in_size[2]//scale)
+            torch.nn.LayerNorm(self.token_dim),
+            torch.nn.Linear(self.token_dim, out_channel*4),
+            Rearrange('b (d h w) c -> b c d h w',d=in_size[0]//patch_size[0],h=in_size[1]//patch_size[1],w=in_size[2]//patch_size[2])
+        )
+        self.channel_mix2 = torch.nn.Sequential(
+            Rearrange('b c d h w -> b (d h w) c'),
+            torch.nn.LayerNorm(out_channel//2),
+            torch.nn.Linear(out_channel//2, out_channel),
+            Rearrange('b (d h w) c -> b c d h w',d=in_size[0]//scale,h=in_size[1]//scale,w=in_size[2]//scale)
         )
         
         # self.beta=torch.Tensor([1],requires_grad=True)
@@ -64,23 +72,26 @@ class MixerBlock3d(torch.nn.Module):
     def forward(self, x):
         ebd=self.embedding(x)
         tkm=self.token_mix(ebd)
-        rev_tkm=self.pixelshuffle(tkm)
-        return self.channel_mix(rev_tkm)
+        chm=self.channel_mix1(tkm)
+        ps=self.pixelshuffle(chm)
+        return self.channel_mix2(ps)
 
-
-
+ 
 class MixerBlock2d(torch.nn.Module):
 
-    def __init__(self, in_channel, in_size, scale=2):
+    def __init__(self, in_size, in_channel, out_channel=None, scale=2):
         super(MixerBlock2d,self).__init__()
         patch_size=[2*scale,2*scale]
         
         if not isinstance(in_size,list):
             isize=in_size
             in_size=[isize,isize]
+        
+        if out_channel is None:
+            out_channel=in_channel
         # self.out_size=[in_size[0]//scale, in_size[1]//scale, in_size[2]//scale]
         self.num_token=in_size[0]//patch_size[0]*in_size[1]//patch_size[1]
-        self.token_dim=in_channel//2 if in_channel>8 else 4
+        self.token_dim=out_channel//2
         
         self.embedding = torch.nn.Conv2d(in_channel, self.token_dim, patch_size, patch_size)
         self.token_mix = torch.nn.Sequential(
@@ -91,11 +102,17 @@ class MixerBlock2d(torch.nn.Module):
             torch.nn.Linear(self.num_token//2, self.num_token),
             Rearrange('b c (h w) -> b c h w', h=in_size[0]//patch_size[0],w=in_size[1]//patch_size[1])
         )
-        self.pixelshuffle=torch.nn.PixelShuffle(patch_size[0]//scale)
-        self.channel_mix = torch.nn.Sequential(
+        self.pixelshuffle=torch.nn.PixelShuffle(2)
+        self.channel_mix1 = torch.nn.Sequential(
             Rearrange('b c h w -> b (h w) c'),
-            torch.nn.LayerNorm(self.token_dim//4),
-            torch.nn.Linear(self.token_dim//4, in_channel),
+            torch.nn.LayerNorm(self.token_dim),
+            torch.nn.Linear(self.token_dim, out_channel*2), 
+            Rearrange('b (h w) c -> b c h w',h=in_size[0]//patch_size[0], w=in_size[1]//patch_size[1])
+        )
+        self.channel_mix2 = torch.nn.Sequential(
+            Rearrange('b c h w -> b (h w) c'),
+            torch.nn.LayerNorm(out_channel//2),
+            torch.nn.Linear(out_channel//2, out_channel), 
             Rearrange('b (h w) c -> b c h w',h=in_size[0]//scale, w=in_size[1]//scale)
         )
         
@@ -104,24 +121,29 @@ class MixerBlock2d(torch.nn.Module):
     def forward(self, x):
         ebd=self.embedding(x)
         tkm=self.token_mix(ebd)
-        rev_tkm=self.pixelshuffle(tkm)
-        return self.channel_mix(rev_tkm)
+        chm=self.channel_mix1(tkm)
+        ps=self.pixelshuffle(chm)
+        return self.channel_mix2(ps)
 
 
 class NonLocalPool3d(torch.nn.Module):
     '''
-    This class is a 3d version of nonlocalpooling.
+    This class is a 3d version of nonlocalpooling. 
     '''
-    def __init__(self, in_channel, in_size, scale=2):
+    def __init__(self, in_size, in_channel, out_channel=None, scale=2):
         super(NonLocalPool3d, self).__init__()
-        self.mlp=MixerBlock3d(in_channel, in_size, scale)
+        self.mlp=MixerBlock3d(in_size, in_channel, out_channel, scale)
         self.max_pool=torch.nn.MaxPool3d(scale)
         self.alpha=torch.nn.Parameter(torch.FloatTensor(1))
+        self.add=True if out_channel is None else False
        
     def forward(self,x):
-        maxpool=self.max_pool(x)
         nonlocalpool=self.mlp(x)
-        return maxpool*(self.alpha).expand_as(maxpool)+nonlocalpool*(1-self.alpha).expand_as(nonlocalpool)
+        if self.add:
+            maxpool=self.max_pool(x)
+            return maxpool*(self.alpha).expand_as(maxpool)+nonlocalpool*(1-self.alpha).expand_as(nonlocalpool)
+        else:
+            return nonlocalpool
 
 
 
@@ -129,13 +151,17 @@ class NonLocalPool2d(torch.nn.Module):
     '''
     This class is a 2d version of nonlocalpooling.
     '''
-    def __init__(self, in_channel, in_size, scale=2):
+    def __init__(self, in_size, in_channel, out_channel=None, scale=2):
         super(NonLocalPool2d, self).__init__() 
-        self.mlp=MixerBlock2d(in_channel, in_size, scale)
+        self.mlp=MixerBlock2d(in_size, in_channel, out_channel, scale)
         self.max_pool=torch.nn.MaxPool2d(scale)
         self.alpha=torch.nn.Parameter(torch.FloatTensor(1))
+        self.add=True if out_channel is None else False
        
     def forward(self,x):
-        maxpool=self.max_pool(x)
         nonlocalpool=self.mlp(x)
-        return maxpool*(self.alpha).expand_as(maxpool)+nonlocalpool*(1-self.alpha).expand_as(nonlocalpool)
+        if self.add:
+            maxpool=self.max_pool(x)
+            return maxpool*(self.alpha).expand_as(maxpool)+nonlocalpool*(1-self.alpha).expand_as(nonlocalpool)
+        else:
+            return nonlocalpool
