@@ -6,7 +6,7 @@ import torch
 
 img = torch.ones([1, 1, 128, 192, 192])
 
-model = NonLocalPool3d([128,192,192],1,2)
+model = NonLocalPool3d([128,192,192],1,2,squeeze=False)
 # parameters = filter(lambda p: p.requires_grad, model.parameters())
 # parameters = sum([np.prod(p.size()) for p in parameters]) / 1_000_000
 # print('Trainable Parameters: %.3fM' % parameters)
