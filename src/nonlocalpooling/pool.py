@@ -97,7 +97,7 @@ class NonLocalPool2d(torch.nn.Module):
         
 
 class NonLocalPool3d(torch.nn.Module):
-    def __init__(self, in_size, in_channel, out_channel=None, scale=2, squeeze=False):
+    def __init__(self, in_size, in_channel, out_channel=None, scale=2, squeeze=True):
         super(NonLocalPool3d, self).__init__()
         self.squeeze=squeeze
 
